@@ -35,11 +35,24 @@ const {
   contentAttributes,
 } = useMessageContext();
 
+const displayedAt = computed(() => {
+  const external = contentAttributes.value?.externalCreatedAt;
+  if (external === undefined || external === null || external === '') {
+    return createdAt.value;
+  }
+
+  const seconds =
+    typeof external === 'number' || /^\d+$/.test(external)
+      ? Number(external)
+      : Date.parse(external) / 1000;
+  return Number.isFinite(seconds) ? seconds : createdAt.value;
+});
+
 const readableTime = computed(() =>
-  messageTimestamp(createdAt.value, 'LLL d, h:mm a')
+  messageTimestamp(displayedAt.value, 'LLL d, h:mm a')
 );
 
-const exactTime = computed(() => exactTimestamp(createdAt.value));
+const exactTime = computed(() => exactTimestamp(displayedAt.value));
 
 const showStatusIndicator = computed(() => {
   if (isPrivate.value) return false;
