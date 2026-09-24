@@ -1,9 +1,14 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import ActionCableConnector from '../actionCable';
 
+const cable = vi.hoisted(() => ({
+  create: vi.fn(() => ({})),
+  remove: vi.fn(),
+}));
+
 vi.mock('@rails/actioncable', () => ({
   createConsumer: () => ({
-    subscriptions: { create: () => ({}) },
+    subscriptions: { create: cable.create, remove: cable.remove },
     disconnect: vi.fn(),
   }),
 }));
@@ -30,8 +35,37 @@ describe('Widget ActionCableConnector', () => {
   });
 
   afterEach(() => {
+    delete window.actionCable;
+    delete window.chatwootPubsubToken;
     vi.clearAllMocks();
     vi.useRealTimers();
+  });
+
+  it('replaces the subscription when the contact inbox token changes', () => {
+    window.actionCable = connector;
+    const initialSubscription = connector.subscription;
+
+    ActionCableConnector.refreshConnector('new-token');
+
+    expect(cable.remove).toHaveBeenCalledWith(initialSubscription);
+    expect(cable.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pubsub_token: 'new-token' }),
+      expect.any(Object)
+    );
+  });
+
+  it('keeps the current subscription when the token is unchanged', () => {
+    window.actionCable = connector;
+
+    ActionCableConnector.refreshConnector('test-token');
+
+    expect(cable.remove).not.toHaveBeenCalled();
+  });
+
+  it('updates the startup token before the connector exists', () => {
+    ActionCableConnector.refreshConnector('new-token');
+
+    expect(window.chatwootPubsubToken).toBe('new-token');
   });
 
   it('registers the conversation.status_changed event handler', () => {

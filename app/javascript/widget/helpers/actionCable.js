@@ -16,6 +16,13 @@ const isMessageInActiveConversation = (getters, message) => {
 const WIDGET_PRESENCE_INTERVAL = 60000;
 
 class ActionCableConnector extends BaseActionCableConnector {
+  static refreshConnector(pubsubToken) {
+    if (!pubsubToken) return;
+
+    window.chatwootPubsubToken = pubsubToken;
+    window.actionCable?.refreshSubscription(pubsubToken);
+  }
+
   constructor(app, pubsubToken) {
     super(app, pubsubToken, '', WIDGET_PRESENCE_INTERVAL);
     this.events = {

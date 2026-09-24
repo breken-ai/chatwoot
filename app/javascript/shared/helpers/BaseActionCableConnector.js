@@ -15,12 +15,27 @@ class BaseActionCableConnector {
     const websocketURL = websocketHost ? `${websocketHost}/cable` : undefined;
 
     this.consumer = createConsumer(websocketURL);
+    this.app = app;
+    this.subscribe(pubsubToken);
+    this.events = {};
+    this.reconnectTimer = null;
+    this.isAValidEvent = () => true;
+    this.triggerPresenceInterval = () => {
+      setTimeout(() => {
+        this.subscription.updatePresence();
+        this.triggerPresenceInterval();
+      }, presenceInterval);
+    };
+    this.triggerPresenceInterval();
+  }
+
+  subscribe(pubsubToken) {
     this.subscription = this.consumer.subscriptions.create(
       {
         channel: 'RoomChannel',
         pubsub_token: pubsubToken,
-        account_id: app.$store.getters.getCurrentAccountId,
-        user_id: app.$store.getters.getCurrentUserID,
+        account_id: this.app.$store.getters.getCurrentAccountId,
+        user_id: this.app.$store.getters.getCurrentUserID,
       },
       {
         updatePresence() {
@@ -34,17 +49,14 @@ class BaseActionCableConnector {
         },
       }
     );
-    this.app = app;
-    this.events = {};
-    this.reconnectTimer = null;
-    this.isAValidEvent = () => true;
-    this.triggerPresenceInterval = () => {
-      setTimeout(() => {
-        this.subscription.updatePresence();
-        this.triggerPresenceInterval();
-      }, presenceInterval);
-    };
-    this.triggerPresenceInterval();
+    this.pubsubToken = pubsubToken;
+  }
+
+  refreshSubscription(pubsubToken) {
+    if (this.pubsubToken === pubsubToken) return;
+
+    this.consumer.subscriptions.remove(this.subscription);
+    this.subscribe(pubsubToken);
   }
 
   checkConnection() {

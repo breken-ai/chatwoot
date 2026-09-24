@@ -1,5 +1,6 @@
 import { API } from 'widget/helpers/axios';
 import { sendMessage } from 'widget/helpers/utils';
+import ActionCableConnector from 'widget/helpers/actionCable';
 import { actions } from '../../contacts';
 
 const commit = vi.fn();
@@ -9,9 +10,30 @@ vi.mock('widget/helpers/axios');
 vi.mock('widget/helpers/utils', () => ({
   sendMessage: vi.fn(),
 }));
+vi.mock('widget/helpers/actionCable', () => ({
+  default: { refreshConnector: vi.fn() },
+}));
 
 describe('#actions', () => {
   describe('#setUser', () => {
+    it('switches the widget socket when setUser returns a new contact inbox', async () => {
+      API.patch.mockResolvedValue({
+        data: {
+          widget_auth_token: 'new-auth-token',
+          pubsub_token: 'new-pubsub-token',
+        },
+      });
+
+      await actions.setUser(
+        { commit, dispatch },
+        { identifier: 'different-user', user: {} }
+      );
+
+      expect(ActionCableConnector.refreshConnector).toHaveBeenCalledWith(
+        'new-pubsub-token'
+      );
+    });
+
     it('sends correct actions if contact object is refreshed ', async () => {
       const user = {
         email: 'thoma@sphadikam.com',
