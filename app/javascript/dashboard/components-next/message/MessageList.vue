@@ -55,6 +55,7 @@ const currentChat = useMapGetter('getSelectedChat');
 
 // Cache for fetched reply messages to avoid duplicate API calls
 const fetchedReplyMessages = reactive(new Map());
+const pendingReplyMessages = new Map();
 
 /**
  * Fetches a specific message from the API by trying to get messages around it
@@ -62,35 +63,43 @@ const fetchedReplyMessages = reactive(new Map());
  * @param {number} conversationId - The ID of the conversation
  * @returns {Promise<Object|null>} - The fetched message or null if not found/error
  */
-const fetchReplyMessage = async (messageId, conversationId) => {
+const fetchReplyMessage = (messageId, conversationId) => {
   // Return cached result if already fetched
   if (fetchedReplyMessages.has(messageId)) {
-    return fetchedReplyMessages.get(messageId);
+    return Promise.resolve(fetchedReplyMessages.get(messageId));
   }
 
-  try {
-    const response = await MessageApi.getPreviousMessages({
-      conversationId,
-      before: messageId + 100,
-      after: messageId - 100,
-    });
-
-    const messages = response.data?.payload || [];
-    const targetMessage = messages.find(msg => msg.id === messageId);
-
-    if (targetMessage) {
-      const camelCaseMessage = useCamelCase(targetMessage);
-      fetchedReplyMessages.set(messageId, camelCaseMessage);
-      return camelCaseMessage;
-    }
-
-    // Cache null result to avoid repeated API calls
-    fetchedReplyMessages.set(messageId, null);
-    return null;
-  } catch (error) {
-    fetchedReplyMessages.set(messageId, null);
-    return null;
+  if (pendingReplyMessages.has(messageId)) {
+    return pendingReplyMessages.get(messageId);
   }
+
+  const request = Promise.resolve()
+    .then(() =>
+      MessageApi.getPreviousMessages({
+        conversationId,
+        before: messageId + 100,
+        after: messageId - 100,
+      })
+    )
+    .then(response => {
+      const messages = response.data?.payload || [];
+      const targetMessage = messages.find(msg => msg.id === messageId);
+
+      if (targetMessage) {
+        const camelCaseMessage = useCamelCase(targetMessage);
+        fetchedReplyMessages.set(messageId, camelCaseMessage);
+        return camelCaseMessage;
+      }
+
+      // A successful lookup with no matching message does not need repeating.
+      fetchedReplyMessages.set(messageId, null);
+      return null;
+    })
+    .catch(() => null)
+    .finally(() => pendingReplyMessages.delete(messageId));
+
+  pendingReplyMessages.set(messageId, request);
+  return request;
 };
 
 /**
@@ -152,7 +161,7 @@ const getInReplyToMessage = parentMessage => {
 
   // Then check fetch cache
   if (!replyMessage && fetchedReplyMessages.has(inReplyToMessageId)) {
-    replyMessage = fetchedReplyMessages.get(inReplyToMessageId);
+    return fetchedReplyMessages.get(inReplyToMessageId);
   }
 
   // If still not found and we have conversation context, fetch it
